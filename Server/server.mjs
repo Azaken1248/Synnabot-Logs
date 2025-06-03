@@ -6,8 +6,8 @@ import cors from 'cors';
 import { EventEmitter } from 'events';
 
 const app = express();
-const PORT = process.env.PORT || 6565; 
-const PM2_APP_NAME_TO_MONITOR = 'Synnabot'; 
+const PORT = process.env.PORT || 6565;
+const PM2_APP_NAME_TO_MONITOR = 'Synnabot';
 
 app.use(cors());
 
@@ -15,13 +15,24 @@ const logEmitter = new EventEmitter();
 
 let pm2Bus = null;
 
+let logBuffer = [];
+const isLikelyNewLine = (rawData) => {
+    return rawData.trim() !== '' && !/^\s/.test(rawData);
+};
+
+function flushBuffer() {
+    if (logBuffer.length > 0) {
+        const fullLogEntry = logBuffer.join('\n');
+        logEmitter.emit('log', fullLogEntry);
+        logBuffer = [];
+    }
+}
 
 function connectToPm2() {
     console.log('Attempting to connect to PM2 daemon...');
     pm2.connect((err) => {
         if (err) {
             console.error('Error connecting to PM2:', err);
-
             setTimeout(connectToPm2, 5000);
             return;
         }
@@ -37,20 +48,45 @@ function connectToPm2() {
             pm2Bus = bus;
             console.log('PM2 event bus launched.');
 
-
             bus.on('log:out', (data) => {
-
                 if (data.process.name === PM2_APP_NAME_TO_MONITOR) {
-                    const logLine = `[${new Date().toISOString()}] [${data.process.name}] [OUT] ${data.data}`;
-                    logEmitter.emit('log', logLine);
+                    const rawLogData = data.data;
+                    const formattedLogLine = `[${new Date().toISOString()}] [${data.process.name}] [OUT] ${rawLogData}`;
+                    const startsNewEntry = logBuffer.length === 0 || isLikelyNewLine(rawLogData);
+
+                    if (startsNewEntry) {
+                        flushBuffer();
+                        logBuffer.push(formattedLogLine);
+                    } else {
+                        if (logBuffer.length === 0) {
+                            logBuffer.push(formattedLogLine);
+                        } else {
+                            if (rawLogData.trim() !== '' && !/^\s/.test(rawLogData)) {
+                                flushBuffer();
+                                logBuffer.push(formattedLogLine);
+                            } else {
+                                logBuffer.push(rawLogData);
+                            }
+                        }
+                    }
                 }
             });
 
             bus.on('log:err', (data) => {
+                if (data.process.name === PM2_APP_NAME_TO_MONITOR) {
+                    const rawLogData = data.data;
+                    const formattedLogLine = `[${new Date().toISOString()}] [${data.process.name}] [ERR] ${rawLogData}`;
 
-                 if (data.process.name === PM2_APP_NAME_TO_MONITOR) {
-                    const logLine = `[${new Date().toISOString()}] [${data.process.name}] [ERR] ${data.data}`;
-                    logEmitter.emit('log', logLine);
+                    if (logBuffer.length === 0) {
+                        logBuffer.push(formattedLogLine);
+                    } else {
+                        if (rawLogData.trim() !== '' && !/^\s/.test(rawLogData)) {
+                            flushBuffer();
+                            logBuffer.push(formattedLogLine);
+                        } else {
+                            logBuffer.push(rawLogData);
+                        }
+                    }
                 }
             });
 
@@ -59,22 +95,22 @@ function connectToPm2() {
             });
 
             bus.on('close', () => {
-                console.log('PM2 bus closed. Attempting to reconnect PM2...');
+                console.log('PM2 bus closed. Flushing buffer and attempting to reconnect PM2...');
+                flushBuffer();
                 pm2Bus = null;
                 setTimeout(connectToPm2, 5000);
             });
 
-             bus.on('error', (err) => {
+            bus.on('error', (err) => {
                 console.error('PM2 bus error:', err);
-                setTimeout(connectToPm2, 5000);
             });
+
+            setInterval(flushBuffer, 1000);
         });
     });
 }
 
 connectToPm2();
-
-
 
 app.get('/logs', (req, res) => {
     console.log('Client connected to /logs');
@@ -88,9 +124,8 @@ app.get('/logs', (req, res) => {
         res.write(':heartbeat\n\n');
     }, 15000);
 
-    const sendLog = (logLine) => {
-        res.write(`data: ${logLine}\n\n`);
-         res.flush && res.flush();
+    const sendLog = (fullLogEntry) => {
+        res.write(`data: ${fullLogEntry}\n\n`);
     };
 
     logEmitter.on('log', sendLog);
@@ -109,8 +144,6 @@ app.get('/', (_req, res) => {
   res.send(`PM2 Log Broadcaster is running and listening for logs from "${PM2_APP_NAME_TO_MONITOR}". Access /logs for the real-time log stream.`);
 });
 
-
-
 const server = http.createServer(app);
 
 server.listen(PORT, () => {
@@ -121,16 +154,19 @@ server.listen(PORT, () => {
 
 const shutdown = () => {
     console.log('Shutting down gracefully...');
+    flushBuffer();
     if (pm2Bus) {
          pm2Bus.close();
     }
-    pm2.disconnect(() => {
-         console.log('Disconnected from PM2 daemon.');
-         server.close(() => {
-            console.log('HTTP server closed.');
-            process.exit(0);
-         });
-    });
+    setTimeout(() => {
+        pm2.disconnect(() => {
+             console.log('Disconnected from PM2 daemon.');
+             server.close(() => {
+                console.log('HTTP server closed.');
+                process.exit(0);
+             });
+        });
+    }, 500);
 
     setTimeout(() => {
         console.error('Forcing shutdown due to timeout.');

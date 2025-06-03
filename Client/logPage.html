@@ -61,25 +61,23 @@
             background-color: #0b0b0b; /* Slightly darker internal background */
             padding: 15px;
             overflow-y: auto; /* Enable vertical scrolling */
-            white-space: pre-wrap; /* Wrap long lines while preserving spacing */
-            word-break: break-word; /* Break long words */
             display: flex; /* Use flexbox for the logs and cursor */
             flex-direction: column;
         }
 
         #logs {
             flex-grow: 1; /* Logs take up space above the cursor */
-            /* Styles for the log lines container */
         }
 
-        .log-line {
-           /* Styles for individual log lines if needed */
-           margin-bottom: 2px; /* Small space between lines */
+        .log-entry {
+           margin-bottom: 5px; /* Space between logical log entries */
            line-height: 1.4;
+           white-space: pre-wrap; /* Preserve internal newlines and spacing */
+           word-break: break-word; /* Break long words that don't have spaces */
+           display: block; /* Ensure each entry is on a new block */
         }
 
-        /* ANSI Color Palette (adjust if needed to match your terminal theme) */
-        /* Colors derived from a common VS Code terminal theme */
+        /* ANSI Color Palette */
         .ansi-black { color: #000000; }
         .ansi-red { color: #cd3131; }
         .ansi-green { color: #0dbc79; }
@@ -88,7 +86,6 @@
         .ansi-magenta { color: #bc3fbc; }
         .ansi-cyan { color: #00bcd4; }
         .ansi-white { color: #e5e5e5; }
-
         .ansi-bright-black { color: #666666; }
         .ansi-bright-red { color: #f14c4c; }
         .ansi-bright-green { color: #23d18b; }
@@ -97,8 +94,6 @@
         .ansi-bright-magenta { color: #d670d6; }
         .ansi-bright-cyan { color: #29b8db; }
         .ansi-bright-white { color: #e7e7e7; }
-
-        /* ANSI Background Colors (less common for log viewers, but included) */
          .ansi-bg-black { background-color: #000000; }
          .ansi-bg-red { background-color: #cd3131; }
          .ansi-bg-green { background-color: #0dbc79; }
@@ -107,7 +102,6 @@
          .ansi-bg-magenta { background-color: #bc3fbc; }
          .ansi-bg-cyan { background-color: #00bcd4; }
          .ansi-bg-white { background-color: #e5e5e5; }
-
          .ansi-bg-bright-black { background-color: #666666; }
          .ansi-bg-bright-red { background-color: #f14c4c; }
          .ansi-bg-bright-green { background-color: #23d18b; }
@@ -117,17 +111,16 @@
          .ansi-bg-bright-cyan { background-color: #29b8db; }
          .ansi-bg-bright-white { background-color: #e7e7e7; }
 
-
         /* Blinking Cursor Style */
         #cursor {
             display: inline-block;
-            width: 8px; /* Adjust width to match font character width */
-            height: 1em; /* Match line height */
-            background-color: #d4d4d4; /* Color of the blinking block */
-            vertical-align: bottom; /* Align with the bottom of the last line */
-            margin-left: 2px; /* Small space after the last log character */
+            width: 8px;
+            height: 1em;
+            background-color: #d4d4d4;
+            vertical-align: bottom;
+            margin-left: 2px;
             animation: blink 1s step-end infinite;
-            flex-shrink: 0; /* Prevent the cursor from shrinking */
+            flex-shrink: 0;
         }
 
         @keyframes blink {
@@ -136,37 +129,37 @@
           100% { opacity: 1; }
         }
 
-         /* Style for the initial message */
+         /* Style for status/error messages */
          .status-message {
-             color: #2472c8; /* Blue color */
+             color: #2472c8;
              font-weight: bold;
+             margin-bottom: 5px;
          }
          .error-message {
-             color: #cd3131; /* Red color */
+             color: #cd3131;
              font-weight: bold;
+             margin-bottom: 5px;
          }
 
         /* --- Responsive Styles for Mobile --- */
         @media (max-width: 600px) {
             #controls {
-                flex-direction: column; /* Stack items vertically */
-                gap: 8px; /* Adjust gap for vertical stacking */
-                padding: 8px; /* Slightly less padding on smaller screens */
+                flex-direction: column;
+                gap: 8px;
+                padding: 8px;
             }
 
             #controls input[type="text"],
             #controls button {
-                width: 100%; /* Make input and buttons full width */
-                box-sizing: border-box; /* Include padding and border in element's total width */
-                 text-align: center; /* Center button text */
+                width: 100%;
+                box-sizing: border-box;
+                 text-align: center;
             }
 
             #controls button {
-                padding: 12px; /* Increase padding for easier tapping */
+                padding: 12px;
             }
         }
-
-
     </style>
 </head>
 <body>
@@ -180,7 +173,7 @@
 
     <div id="terminal-container">
         <div id="logs">
-            <!-- Log lines will be appended here by JavaScript -->
+            <!-- Log entries will be appended here by JavaScript -->
         </div>
         <span id="cursor"></span> <!-- The blinking cursor -->
     </div>
@@ -195,11 +188,13 @@
         const downloadButton = document.getElementById('download-button');
 
         // *** IMPORTANT: Set this to the correct URL of your broadcaster endpoint ***
-        const logEndpoint = 'http://localhost:3001/logs';
+        const logEndpoint = 'https://api.logs.synnabot.azaken.com/logs'; // Use your HTTPS domain
 
         let eventSource = null;
         const ansi_up = new AnsiUp();
-        const allLogs = []; // Array to store all raw log lines
+
+        // Array to store *complete* log entries as received from the server
+        const allLogs = [];
 
         function connectSSE() {
             console.log(`Attempting to connect to SSE endpoint: ${logEndpoint}`);
@@ -212,39 +207,61 @@
 
             eventSource.onopen = function(event) {
                 console.log("SSE connection opened.");
-                appendMessage('--- Connected to log stream ---', 'status-message');
+                 // Initial message from server is usually sent as a data: message right away
             };
 
             eventSource.onmessage = function(event) {
-                const logLine = event.data;
-                allLogs.push(logLine); // Store the raw log line
+                const logEntry = event.data; // This is the full, potentially multiline, log entry from the server
 
-                // Only append to the display if no search is active
+                // Handle SSE comments (like heartbeats)
+                if (logEntry.startsWith(':')) {
+                     if (!logEntry.startsWith(':heartbeat')) {
+                         // It's a non-heartbeat comment, maybe an initial status message
+                         appendMessage(logEntry, 'status-message');
+                     }
+                     return; // Don't process comments as regular log entries
+                }
+
+                // If not a comment, it's a log entry
+                allLogs.push(logEntry); // Store the complete entry
+
+                // Only render if not currently searching
                 if (searchInput.value.trim() === '') {
-                    appendLogToDisplay(logLine);
+                    renderLogEntry(logEntry); // Render the complete entry
                 }
                 // If search is active, new logs won't appear until search is cleared or rerun
             };
 
             eventSource.onerror = function(err) {
                 console.error("SSE error:", err);
-                eventSource.close();
-                appendMessage(`--- SSE Error: ${err.message || 'Connection failed'}. Attempting to reconnect... ---`, 'error-message');
-                 setTimeout(connectSSE, 5000);
+                 // Check readyState to distinguish between intentional close and network error
+                if (eventSource.readyState === EventSource.CLOSED) {
+                     console.log("SSE connection closed normally or due to unrecoverable error.");
+                     appendMessage('--- SSE Connection closed. ---', 'error-message');
+                } else {
+                    console.log("SSE error. Attempting to reconnect in 5 seconds...");
+                    appendMessage(`--- SSE Error: ${err.message || 'Connection failed'}. Attempting to reconnect... ---`, 'error-message');
+                    eventSource.close(); // Ensure closed before attempting reconnect
+                    setTimeout(connectSSE, 5000); // Attempt reconnect
+                }
             };
         }
 
-        // Function to append a single log line to the visible terminal display
-        function appendLogToDisplay(logLine) {
-            const htmlLogLine = ansi_up.ansi_to_html(logLine);
-            const logElement = document.createElement('div');
-            logElement.className = 'log-line';
-            logElement.innerHTML = htmlLogLine; // Use innerHTML for ANSI colors
-            logsDiv.appendChild(logElement);
+        // Function to render a *complete* log entry (potentially multiline) to the display
+        function renderLogEntry(fullLogEntry) {
+            const htmlEntry = ansi_up.ansi_to_html(fullLogEntry);
+            const entryElement = document.createElement('div');
+            entryElement.className = 'log-entry'; // Use log-entry class for complete entries
+             // Use   for completely empty entries (after trimming) to ensure they take up space for height
+             entryElement.innerHTML = htmlEntry.trim() === '' ? ' ' : htmlEntry;
+
+            logsDiv.appendChild(entryElement);
+
+            // Scroll to the bottom after appending the log entry
             scrollToBottom();
         }
 
-        // Function to clear the current displayed logs
+        // Function to clear the current displayed logs (all the individual entry divs)
         function clearDisplayedLogs() {
             while (logsDiv.firstChild) {
                 logsDiv.removeChild(logsDiv.firstChild);
@@ -257,22 +274,36 @@
             clearDisplayedLogs(); // Clear current view
 
             if (searchTerm === '') {
-                // If search term is empty, display all logs
-                allLogs.forEach(log => appendLogToDisplay(log));
+                // If search term is empty, display all original log entries
+                allLogs.forEach(logEntry => renderLogEntry(logEntry));
+                searchButton.textContent = 'Search'; // Reset button text
                 clearSearchButton.style.display = 'none'; // Hide clear button
                 console.log("Search cleared. Displaying all logs.");
+
+                // Add a status message about clearing search
+                 appendMessage(`--- Displaying all ${allLogs.length} stored log entries. ---`, 'status-message');
+
             } else {
-                // Filter and display only matching logs
-                const matchingLogs = allLogs.filter(log => log.toLowerCase().includes(searchTerm));
-                matchingLogs.forEach(log => appendLogToDisplay(log));
+                // Filter original log entries (which contain the full text including newlines)
+                const matchingLogs = allLogs.filter(logEntry => logEntry.toLowerCase().includes(searchTerm));
+
+                // Append the matching original log entries to the display
+                matchingLogs.forEach(logEntry => renderLogEntry(logEntry));
+
+                searchButton.textContent = `Search (${matchingLogs.length})`; // Update button text with count
                 clearSearchButton.style.display = 'inline-block'; // Show clear button
-                 console.log(`Search for "${searchTerm}" complete. Found ${matchingLogs.length} matching lines.`);
+                console.log(`Search for "${searchTerm}" complete. Found ${matchingLogs.length} matching entries.`);
 
                 // Add a status message about the search results
-                appendMessage(`--- Search for "${searchTerm}" found ${matchingLogs.length} matching lines. ---`, 'status-message');
+                appendMessage(`--- Search for "${searchTerm}" found ${matchingLogs.length} matching entries. ---`, 'status-message');
             }
              // After search, always scroll to the top of the container to see results from the beginning
-            terminalContainer.scrollTop = 0;
+             // unless there are no logs, then scroll to bottom to see status
+             if(logsDiv.childElementCount > 0) {
+                terminalContainer.scrollTop = 0;
+             } else {
+                scrollToBottom(); // Scroll to see the 'found 0' message
+             }
         }
 
         // Event listener for the Search button
@@ -295,7 +326,9 @@
 
         // Function to download all stored logs
         function downloadLogs() {
-            const logContent = allLogs.join('\n'); // Join all logs with newlines
+            // Join original log entries with newlines for download
+            const logContent = allLogs.join('\n'); // Join all log entries with newlines
+
             const blob = new Blob([logContent], { type: 'text/plain' }); // Create a Blob
             const url = URL.createObjectURL(blob); // Create a temporary URL for the Blob
 
@@ -308,8 +341,8 @@
             // Clean up
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-             console.log(`Downloaded ${allLogs.length} log lines.`);
-              appendMessage(`--- Downloaded ${allLogs.length} log lines. ---`, 'status-message');
+             console.log(`Downloaded ${allLogs.length} log entries.`);
+              appendMessage(`--- Downloaded ${allLogs.length} log entries. ---`, 'status-message');
         }
 
         // Event listener for the Download button
@@ -317,19 +350,26 @@
 
 
         // Function to append a simple status or error message to the logs
+        // These messages are treated as single log entries and are not stored in allLogs
         function appendMessage(message, className = '') {
              const msgElement = document.createElement('div');
-             msgElement.className = `log-line ${className}`; // Add 'log-line' class and any custom class
+             msgElement.className = `log-entry ${className}`; // Add 'log-entry' class and any custom class
+             // Use innerHTML for ANSI colors if messages might contain them, otherwise textContent is safer
              msgElement.textContent = message;
+             // Ensure it renders even if empty or whitespace only
+             if (msgElement.textContent.trim() === '') msgElement.innerHTML = ' ';
+
              logsDiv.appendChild(msgElement);
-             // Don't auto-scroll after status messages, only after new logs
-             // scrollToBottom(); // Keep this if you want status messages to force scroll
+             // Don't auto-scroll after status messages unless near the bottom or it's the only message
+             if (terminalContainer.scrollHeight - terminalContainer.scrollTop - terminalContainer.clientHeight <= 100 || logsDiv.children.length <= 2) {
+                 scrollToBottom();
+             }
         }
 
         // Function to scroll the terminal container to the bottom
         function scrollToBottom() {
-             // Only auto-scroll if the user is already near the bottom
-             const threshold = 50; // Pixels from the bottom to trigger auto-scroll
+             // Only auto-scroll if the user is already near the bottom (within 50px)
+             const threshold = 50;
              const isNearBottom = terminalContainer.scrollHeight - terminalContainer.scrollTop - terminalContainer.clientHeight <= threshold;
 
              if (isNearBottom) {
@@ -342,7 +382,6 @@
              // If not near bottom, the user is likely reviewing history, so don't auto-scroll.
         }
 
-
         // Start the SSE connection when the page loads
         connectSSE();
 
@@ -354,6 +393,12 @@
             if (cursorSpan) cursorSpan.style.visibility = 'visible';
          });
 
+        // Handle cleanup when the page unloads
+        window.addEventListener('beforeunload', () => {
+             if (eventSource) {
+                 eventSource.close(); // Close the SSE connection
+             }
+        });
 
     </script>
 
