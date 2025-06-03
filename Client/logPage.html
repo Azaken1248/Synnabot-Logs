@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synnabot Logs Viewer</title>
+    <!-- Include the ansi_up library from a CDN to handle ANSI color codes -->
+    <script src="https://cdn.jsdelivr.net/npm/ansi_up@5.1.0/ansi_up.min.js"></script>
+    <style>
+        body {
+            background-color: #1e1e1e; /* Dark terminal background */
+            color: #d4d4d4; /* Light gray default text color */
+            font-family: 'Consolas', 'Monaco', 'Andale Mono', 'Ubuntu Mono', monospace; /* Monospace font */
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh; /* Full viewport height */
+        }
+
+        #controls {
+            background-color: #282c34; /* Slightly lighter dark background for controls */
+            padding: 10px 15px;
+            display: flex;
+            gap: 10px; /* Space between control elements */
+            align-items: center;
+            flex-shrink: 0; /* Prevent controls from shrinking */
+            flex-wrap: wrap; /* Allow items to wrap on smaller screens */
+        }
+
+        #controls input[type="text"] {
+            flex-grow: 1; /* Allow input to take up available space */
+            padding: 8px;
+            border: 1px solid #555;
+            background-color: #333;
+            color: #d4d4d4;
+            font-family: inherit;
+            font-size: 1em;
+            border-radius: 4px;
+        }
+
+        #controls button {
+            padding: 8px 15px;
+            background-color: #61afef; /* Blue color */
+            color: #1e1e1e; /* Dark text */
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 1em;
+            transition: background-color 0.2s ease;
+            white-space: nowrap; /* Prevent button text from wrapping */
+        }
+
+        #controls button:hover {
+            background-color: #52a2e2; /* Darker blue on hover */
+        }
+
+        #terminal-container {
+            flex-grow: 1; /* Takes up available vertical space */
+            background-color: #0b0b0b; /* Slightly darker internal background */
+            padding: 15px;
+            overflow-y: auto; /* Enable vertical scrolling */
+            white-space: pre-wrap; /* Wrap long lines while preserving spacing */
+            word-break: break-word; /* Break long words */
+            display: flex; /* Use flexbox for the logs and cursor */
+            flex-direction: column;
+        }
+
+        #logs {
+            flex-grow: 1; /* Logs take up space above the cursor */
+            /* Styles for the log lines container */
+        }
+
+        .log-line {
+           /* Styles for individual log lines if needed */
+           margin-bottom: 2px; /* Small space between lines */
+           line-height: 1.4;
+        }
+
+        /* ANSI Color Palette (adjust if needed to match your terminal theme) */
+        /* Colors derived from a common VS Code terminal theme */
+        .ansi-black { color: #000000; }
+        .ansi-red { color: #cd3131; }
+        .ansi-green { color: #0dbc79; }
+        .ansi-yellow { color: #e5e510; }
+        .ansi-blue { color: #2472c8; }
+        .ansi-magenta { color: #bc3fbc; }
+        .ansi-cyan { color: #00bcd4; }
+        .ansi-white { color: #e5e5e5; }
+
+        .ansi-bright-black { color: #666666; }
+        .ansi-bright-red { color: #f14c4c; }
+        .ansi-bright-green { color: #23d18b; }
+        .ansi-bright-yellow { color: #f5f543; }
+        .ansi-bright-blue { color: #3b8eea; }
+        .ansi-bright-magenta { color: #d670d6; }
+        .ansi-bright-cyan { color: #29b8db; }
+        .ansi-bright-white { color: #e7e7e7; }
+
+        /* ANSI Background Colors (less common for log viewers, but included) */
+         .ansi-bg-black { background-color: #000000; }
+         .ansi-bg-red { background-color: #cd3131; }
+         .ansi-bg-green { background-color: #0dbc79; }
+         .ansi-bg-yellow { background-color: #e5e510; }
+         .ansi-bg-blue { background-color: #2472c8; }
+         .ansi-bg-magenta { background-color: #bc3fbc; }
+         .ansi-bg-cyan { background-color: #00bcd4; }
+         .ansi-bg-white { background-color: #e5e5e5; }
+
+         .ansi-bg-bright-black { background-color: #666666; }
+         .ansi-bg-bright-red { background-color: #f14c4c; }
+         .ansi-bg-bright-green { background-color: #23d18b; }
+         .ansi-bg-bright-yellow { background-color: #f5f543; }
+         .ansi-bg-bright-blue { background-color: #3b8eea; }
+         .ansi-bg-bright-magenta { background-color: #d670d6; }
+         .ansi-bg-bright-cyan { background-color: #29b8db; }
+         .ansi-bg-bright-white { background-color: #e7e7e7; }
+
+
+        /* Blinking Cursor Style */
+        #cursor {
+            display: inline-block;
+            width: 8px; /* Adjust width to match font character width */
+            height: 1em; /* Match line height */
+            background-color: #d4d4d4; /* Color of the blinking block */
+            vertical-align: bottom; /* Align with the bottom of the last line */
+            margin-left: 2px; /* Small space after the last log character */
+            animation: blink 1s step-end infinite;
+            flex-shrink: 0; /* Prevent the cursor from shrinking */
+        }
+
+        @keyframes blink {
+          0% { opacity: 1; }
+          50% { opacity: 0; }
+          100% { opacity: 1; }
+        }
+
+         /* Style for the initial message */
+         .status-message {
+             color: #2472c8; /* Blue color */
+             font-weight: bold;
+         }
+         .error-message {
+             color: #cd3131; /* Red color */
+             font-weight: bold;
+         }
+
+        /* --- Responsive Styles for Mobile --- */
+        @media (max-width: 600px) {
+            #controls {
+                flex-direction: column; /* Stack items vertically */
+                gap: 8px; /* Adjust gap for vertical stacking */
+                padding: 8px; /* Slightly less padding on smaller screens */
+            }
+
+            #controls input[type="text"],
+            #controls button {
+                width: 100%; /* Make input and buttons full width */
+                box-sizing: border-box; /* Include padding and border in element's total width */
+                 text-align: center; /* Center button text */
+            }
+
+            #controls button {
+                padding: 12px; /* Increase padding for easier tapping */
+            }
+        }
+
+
+    </style>
+</head>
+<body>
+
+    <div id="controls">
+        <input type="text" id="search-input" placeholder="Search logs...">
+        <button id="search-button">Search</button>
+        <button id="clear-search-button" style="display: none;">Clear Search</button>
+        <button id="download-button">Download All Logs</button>
+    </div>
+
+    <div id="terminal-container">
+        <div id="logs">
+            <!-- Log lines will be appended here by JavaScript -->
+        </div>
+        <span id="cursor"></span> <!-- The blinking cursor -->
+    </div>
+
+    <script>
+        const logsDiv = document.getElementById('logs');
+        const terminalContainer = document.getElementById('terminal-container');
+        const cursorSpan = document.getElementById('cursor');
+        const searchInput = document.getElementById('search-input');
+        const searchButton = document.getElementById('search-button');
+        const clearSearchButton = document.getElementById('clear-search-button');
+        const downloadButton = document.getElementById('download-button');
+
+        // *** IMPORTANT: Set this to the correct URL of your broadcaster endpoint ***
+        const logEndpoint = 'http://localhost:3001/logs';
+
+        let eventSource = null;
+        const ansi_up = new AnsiUp();
+        const allLogs = []; // Array to store all raw log lines
+
+        function connectSSE() {
+            console.log(`Attempting to connect to SSE endpoint: ${logEndpoint}`);
+
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            eventSource = new EventSource(logEndpoint);
+
+            eventSource.onopen = function(event) {
+                console.log("SSE connection opened.");
+                appendMessage('--- Connected to log stream ---', 'status-message');
+            };
+
+            eventSource.onmessage = function(event) {
+                const logLine = event.data;
+                allLogs.push(logLine); // Store the raw log line
+
+                // Only append to the display if no search is active
+                if (searchInput.value.trim() === '') {
+                    appendLogToDisplay(logLine);
+                }
+                // If search is active, new logs won't appear until search is cleared or rerun
+            };
+
+            eventSource.onerror = function(err) {
+                console.error("SSE error:", err);
+                eventSource.close();
+                appendMessage(`--- SSE Error: ${err.message || 'Connection failed'}. Attempting to reconnect... ---`, 'error-message');
+                 setTimeout(connectSSE, 5000);
+            };
+        }
+
+        // Function to append a single log line to the visible terminal display
+        function appendLogToDisplay(logLine) {
+            const htmlLogLine = ansi_up.ansi_to_html(logLine);
+            const logElement = document.createElement('div');
+            logElement.className = 'log-line';
+            logElement.innerHTML = htmlLogLine; // Use innerHTML for ANSI colors
+            logsDiv.appendChild(logElement);
+            scrollToBottom();
+        }
+
+        // Function to clear the current displayed logs
+        function clearDisplayedLogs() {
+            while (logsDiv.firstChild) {
+                logsDiv.removeChild(logsDiv.firstChild);
+            }
+        }
+
+        // Function to filter and display logs based on the search term
+        function performSearch() {
+            const searchTerm = searchInput.value.trim().toLowerCase(); // Case-insensitive search
+            clearDisplayedLogs(); // Clear current view
+
+            if (searchTerm === '') {
+                // If search term is empty, display all logs
+                allLogs.forEach(log => appendLogToDisplay(log));
+                clearSearchButton.style.display = 'none'; // Hide clear button
+                console.log("Search cleared. Displaying all logs.");
+            } else {
+                // Filter and display only matching logs
+                const matchingLogs = allLogs.filter(log => log.toLowerCase().includes(searchTerm));
+                matchingLogs.forEach(log => appendLogToDisplay(log));
+                clearSearchButton.style.display = 'inline-block'; // Show clear button
+                 console.log(`Search for "${searchTerm}" complete. Found ${matchingLogs.length} matching lines.`);
+
+                // Add a status message about the search results
+                appendMessage(`--- Search for "${searchTerm}" found ${matchingLogs.length} matching lines. ---`, 'status-message');
+            }
+             // After search, always scroll to the top of the container to see results from the beginning
+            terminalContainer.scrollTop = 0;
+        }
+
+        // Event listener for the Search button
+        searchButton.addEventListener('click', performSearch);
+
+        // Allow pressing Enter in the search input to trigger search
+        searchInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Prevent default form submission if input was inside a form
+                performSearch();
+            }
+        });
+
+        // Event listener for the Clear Search button
+        clearSearchButton.addEventListener('click', () => {
+            searchInput.value = ''; // Clear the input field
+            performSearch(); // Perform search with empty term (will display all logs)
+        });
+
+
+        // Function to download all stored logs
+        function downloadLogs() {
+            const logContent = allLogs.join('\n'); // Join all logs with newlines
+            const blob = new Blob([logContent], { type: 'text/plain' }); // Create a Blob
+            const url = URL.createObjectURL(blob); // Create a temporary URL for the Blob
+
+            const a = document.createElement('a'); // Create a temporary anchor element
+            a.href = url;
+            a.download = `synnabot_logs_${new Date().toISOString().replace(/[:.-]/g, '_')}.txt`; // Filename
+            document.body.appendChild(a); // Append to body is sometimes required for click() to work
+            a.click(); // Programmatically click the link to trigger download
+
+            // Clean up
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+             console.log(`Downloaded ${allLogs.length} log lines.`);
+              appendMessage(`--- Downloaded ${allLogs.length} log lines. ---`, 'status-message');
+        }
+
+        // Event listener for the Download button
+        downloadButton.addEventListener('click', downloadLogs);
+
+
+        // Function to append a simple status or error message to the logs
+        function appendMessage(message, className = '') {
+             const msgElement = document.createElement('div');
+             msgElement.className = `log-line ${className}`; // Add 'log-line' class and any custom class
+             msgElement.textContent = message;
+             logsDiv.appendChild(msgElement);
+             // Don't auto-scroll after status messages, only after new logs
+             // scrollToBottom(); // Keep this if you want status messages to force scroll
+        }
+
+        // Function to scroll the terminal container to the bottom
+        function scrollToBottom() {
+             // Only auto-scroll if the user is already near the bottom
+             const threshold = 50; // Pixels from the bottom to trigger auto-scroll
+             const isNearBottom = terminalContainer.scrollHeight - terminalContainer.scrollTop - terminalContainer.clientHeight <= threshold;
+
+             if (isNearBottom) {
+                 terminalContainer.scrollTop = terminalContainer.scrollHeight;
+                // Ensure the cursor is also visible at the bottom if it exists
+                 if (cursorSpan) {
+                     cursorSpan.scrollIntoView(false);
+                 }
+             }
+             // If not near bottom, the user is likely reviewing history, so don't auto-scroll.
+        }
+
+
+        // Start the SSE connection when the page loads
+        connectSSE();
+
+        // Optional: Hide cursor when mouse is over the terminal area, like some terminals
+        terminalContainer.addEventListener('mouseenter', () => {
+             if (cursorSpan) cursorSpan.style.visibility = 'hidden';
+        });
+         terminalContainer.addEventListener('mouseleave', () => {
+            if (cursorSpan) cursorSpan.style.visibility = 'visible';
+         });
+
+
+    </script>
+
+</body>
+</html>
