@@ -1,19 +1,29 @@
 {
   "name": "server",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "src/server.mjs",
   "type": "module",
   "scripts": {
+    "start": "node src/server.mjs",
+    "dev": "node --watch src/server.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "PM2 Log Broadcaster",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
     "express": "^5.1.0",
-    "pm2": "^7.0.1"
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "pm2": "^7.0.1",
+    "pino": "^9.0.0",
+    "pino-pretty": "^11.0.0"
   },
   "overrides": {
     "pm2": {
