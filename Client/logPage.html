@@ -499,6 +499,30 @@
         html = ansiUpInstance.ansi_to_html(text);
       }
 
+      // Add color coding for standard log segments
+      html = html.replace(/\[(DEBUG|INFO|WARN|ERROR|OUT|ERR)\]/g, (match, level) => {
+        let color = '';
+        switch(level) {
+          case 'DEBUG': color = '#a1a1aa'; break; // gray
+          case 'INFO': color = '#3b82f6'; break;  // blue
+          case 'WARN': color = '#eab308'; break;  // yellow
+          case 'ERROR': color = '#ef4444'; break; // red
+          case 'OUT': color = '#22c55e'; break;   // green
+          case 'ERR': color = '#ef4444'; break;   // red
+        }
+        return `<span style="color: ${color}; font-weight: 600;">[${level}]</span>`;
+      });
+      
+      // Highlight timestamps (e.g., [2026-06-05T07:04:24.194Z])
+      html = html.replace(/\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?\]/g, (match) => {
+        return `<span style="color: #6366f1;">${match}</span>`; // indigo
+      });
+      
+      // Highlight process name [Synnabot]
+      html = html.replace(/\[(Synnabot)\]/g, (match, name) => {
+        return `[<span style="color: #c084fc;">${name}</span>]`; // purple
+      });
+
       return (
         <div 
           id={`log-line-${index}`}
@@ -510,7 +534,7 @@
 
     // ----------------- Main App Component -----------------
     function App() {
-      const serverHost = 'http://localhost:6565';
+      const serverHost = 'https://synnabotlogsapi.azaken.com';
 
       const [logs, setLogs] = useState([]);
       const [historyCount, setHistoryCount] = useState(500);
