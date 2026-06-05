@@ -31,7 +31,8 @@ router.get('/logs', (req, res) => {
 
   const sendLog = (fullLogEntry) => {
     try {
-      res.write(`data: ${fullLogEntry}\n\n`);
+      const sseData = fullLogEntry.split('\n').map(line => `data: ${line}`).join('\n');
+      res.write(`${sseData}\n\n`);
     } catch (writeErr) {
       logger.error({ err: writeErr, clientIp }, 'Error writing to SSE stream');
     }
