@@ -216,26 +216,26 @@ class PM2Service extends EventEmitter {
         const outLines = info.outLog ? await readLastLines(info.outLog, linesCount) : [];
         const errLines = info.errLog ? await readLastLines(info.errLog, linesCount) : [];
 
-        const stdoutLogs = outLines.map((line) => ({
-          type: 'out',
-          text: line,
-          timestamp: parseTimestamp(line) || 0,
-        }));
+        let lastOutTs = Date.now();
+        const stdoutLogs = outLines.map((line) => {
+          const ts = parseTimestamp(line);
+          if (ts) lastOutTs = ts;
+          return { type: 'out', text: line, timestamp: ts || lastOutTs };
+        });
 
-        const stderrLogs = errLines.map((line) => ({
-          type: 'err',
-          text: line,
-          timestamp: parseTimestamp(line) || 0,
-        }));
+        let lastErrTs = Date.now();
+        const stderrLogs = errLines.map((line) => {
+          const ts = parseTimestamp(line);
+          if (ts) lastErrTs = ts;
+          return { type: 'err', text: line, timestamp: ts || lastErrTs };
+        });
 
         const combined = [...stdoutLogs, ...stderrLogs];
-        if (combined.some((c) => c.timestamp > 0)) {
-          combined.sort((a, b) => a.timestamp - b.timestamp);
-        }
+        combined.sort((a, b) => a.timestamp - b.timestamp);
 
         const resultLines = combined.map((c) => {
           const hasTime = /^\[\d{4}-\d{2}-\d{2}/.test(c.text) || /^\d{4}-\d{2}-\d{2}/.test(c.text);
-          if (hasTime) return c.text;
+          if (hasTime || /^\s/.test(c.text) || c.text.trim() === '') return c.text;
 
           const prefix = c.type === 'err' ? 'ERR' : 'OUT';
           return `[${new Date().toISOString()}] [${info.name}] [${prefix}] ${c.text}`;
