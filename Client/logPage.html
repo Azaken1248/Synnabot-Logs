@@ -1,406 +1,1023 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Synnabot Logs Viewer</title>
-    <!-- Include the ansi_up library from a CDN to handle ANSI color codes -->
-    <script src="https://cdn.jsdelivr.net/npm/ansi_up@5.1.0/ansi_up.min.js"></script>
-    <style>
-        body {
-            background-color: #1e1e1e; /* Dark terminal background */
-            color: #d4d4d4; /* Light gray default text color */
-            font-family: 'Consolas', 'Monaco', 'Andale Mono', 'Ubuntu Mono', monospace; /* Monospace font */
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            height: 100vh; /* Full viewport height */
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Synnabot Logs Dashboard</title>
+  
+  <!-- CDNs for React, ReactDOM, Recharts, Babel, and AnsiUp -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/recharts/umd/Recharts.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+  <script src="https://cdn.jsdelivr.net/npm/ansi_up@5.1.0/ansi_up.min.js" crossorigin></script>
 
-        #controls {
-            background-color: #282c34; /* Slightly lighter dark background for controls */
-            padding: 10px 15px;
-            display: flex;
-            gap: 10px; /* Space between control elements */
-            align-items: center;
-            flex-shrink: 0; /* Prevent controls from shrinking */
-            flex-wrap: wrap; /* Allow items to wrap on smaller screens */
-        }
+  <!-- Google Font: Inter (UI) & JetBrains Mono (Terminal) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-        #controls input[type="text"] {
-            flex-grow: 1; /* Allow input to take up available space */
-            padding: 8px;
-            border: 1px solid #555;
-            background-color: #333;
-            color: #d4d4d4;
-            font-family: inherit;
-            font-size: 1em;
-            border-radius: 4px;
-        }
+  <style>
+    :root {
+      --bg-main: #09090b;
+      --bg-card: #18181b;
+      --bg-terminal: #030303;
+      --border-color: #27272a;
+      --text-main: #f4f4f5;
+      --text-muted: #a1a1aa;
+      --cyan: #06b6d4;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #eab308;
+      --orange: #f97316;
+    }
 
-        #controls button {
-            padding: 8px 15px;
-            background-color: #61afef; /* Blue color */
-            color: #1e1e1e; /* Dark text */
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-family: inherit;
-            font-size: 1em;
-            transition: background-color 0.2s ease;
-            white-space: nowrap; /* Prevent button text from wrapping */
-        }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-        #controls button:hover {
-            background-color: #52a2e2; /* Darker blue on hover */
-        }
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      overflow: hidden;
+      gap: 16px;
+    }
 
-        #terminal-container {
-            flex-grow: 1; /* Takes up available vertical space */
-            background-color: #0b0b0b; /* Slightly darker internal background */
-            padding: 15px;
-            overflow-y: auto; /* Enable vertical scrolling */
-            display: flex; /* Use flexbox for the logs and cursor */
-            flex-direction: column;
-        }
+    #root {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      width: 100%;
+      gap: 16px;
+    }
 
-        #logs {
-            flex-grow: 1; /* Logs take up space above the cursor */
-        }
+    /* Minimalist Cards */
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-color);
+    }
 
-        .log-entry {
-           margin-bottom: 5px; /* Space between logical log entries */
-           line-height: 1.4;
-           white-space: pre-wrap; /* Preserve internal newlines and spacing */
-           word-break: break-word; /* Break long words that don't have spaces */
-           display: block; /* Ensure each entry is on a new block */
-        }
+    .header-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
 
-        /* ANSI Color Palette */
-        .ansi-black { color: #000000; }
-        .ansi-red { color: #cd3131; }
-        .ansi-green { color: #0dbc79; }
-        .ansi-yellow { color: #e5e510; }
-        .ansi-blue { color: #2472c8; }
-        .ansi-magenta { color: #bc3fbc; }
-        .ansi-cyan { color: #00bcd4; }
-        .ansi-white { color: #e5e5e5; }
-        .ansi-bright-black { color: #666666; }
-        .ansi-bright-red { color: #f14c4c; }
-        .ansi-bright-green { color: #23d18b; }
-        .ansi-bright-yellow { color: #f5f543; }
-        .ansi-bright-blue { color: #3b8eea; }
-        .ansi-bright-magenta { color: #d670d6; }
-        .ansi-bright-cyan { color: #29b8db; }
-        .ansi-bright-white { color: #e7e7e7; }
-         .ansi-bg-black { background-color: #000000; }
-         .ansi-bg-red { background-color: #cd3131; }
-         .ansi-bg-green { background-color: #0dbc79; }
-         .ansi-bg-yellow { background-color: #e5e510; }
-         .ansi-bg-blue { background-color: #2472c8; }
-         .ansi-bg-magenta { background-color: #bc3fbc; }
-         .ansi-bg-cyan { background-color: #00bcd4; }
-         .ansi-bg-white { background-color: #e5e5e5; }
-         .ansi-bg-bright-black { background-color: #666666; }
-         .ansi-bg-bright-red { background-color: #f14c4c; }
-         .ansi-bg-bright-green { background-color: #23d18b; }
-         .ansi-bg-bright-yellow { background-color: #f5f543; }
-         .ansi-bg-bright-blue { background-color: #3b8eea; }
-         .ansi-bg-bright-magenta { background-color: #d670d6; }
-         .ansi-bg-bright-cyan { background-color: #29b8db; }
-         .ansi-bg-bright-white { background-color: #e7e7e7; }
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 0.875rem;
+    }
 
-        /* Blinking Cursor Style */
-        #cursor {
-            display: inline-block;
-            width: 8px;
-            height: 1em;
-            background-color: #d4d4d4;
-            vertical-align: bottom;
-            margin-left: 2px;
-            animation: blink 1s step-end infinite;
-            flex-shrink: 0;
-        }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      font-weight: 500;
+    }
 
-        @keyframes blink {
-          0% { opacity: 1; }
-          50% { opacity: 0; }
-          100% { opacity: 1; }
-        }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
 
-         /* Style for status/error messages */
-         .status-message {
-             color: #2472c8;
-             font-weight: bold;
-             margin-bottom: 5px;
-         }
-         .error-message {
-             color: #cd3131;
-             font-weight: bold;
-             margin-bottom: 5px;
-         }
+    .status-dot.connected {
+      background-color: var(--green);
+      box-shadow: 0 0 8px var(--green);
+    }
 
-        /* --- Responsive Styles for Mobile --- */
-        @media (max-width: 600px) {
-            #controls {
-                flex-direction: column;
-                gap: 8px;
-                padding: 8px;
-            }
+    .status-dot.connecting {
+      background-color: var(--yellow);
+      animation: pulse 1.5s infinite ease-in-out;
+    }
 
-            #controls input[type="text"],
-            #controls button {
-                width: 100%;
-                box-sizing: border-box;
-                 text-align: center;
-            }
+    .status-dot.disconnected {
+      background-color: var(--red);
+    }
 
-            #controls button {
-                padding: 12px;
-            }
-        }
-    </style>
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+
+    /* Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    @media (max-width: 1024px) {
+      .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 640px) {
+      .metrics-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .metric-card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      position: relative;
+    }
+
+    .metric-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .metric-value {
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+    }
+
+    .metric-subtext {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .chart-container {
+      height: 60px;
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    /* Console Panel */
+    .console-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background-color: var(--bg-terminal);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    /* Console Toolbar */
+    .console-toolbar {
+      background-color: var(--bg-card);
+      border-bottom: 1px solid var(--border-color);
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-left, .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* Search Input Control */
+    .search-control {
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-main);
+      border-radius: 4px;
+      overflow: hidden;
+      height: 32px;
+    }
+
+    .search-input {
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.875rem;
+      padding: 0 8px;
+      width: 180px;
+      outline: none;
+    }
+
+    .search-indicator {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      padding: 0 6px;
+      border-right: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+
+    .search-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      transition: color 0.15s ease;
+    }
+
+    .search-btn:hover {
+      color: var(--text-main);
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    .search-toggle-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0 8px;
+      cursor: pointer;
+      height: 100%;
+      border-left: 1px solid var(--border-color);
+      transition: all 0.15s ease;
+    }
+
+    .search-toggle-btn.active {
+      color: var(--cyan);
+      background-color: rgba(6, 182, 212, 0.1);
+    }
+
+    /* Buttons */
+    .btn {
+      background-color: var(--bg-main);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      height: 32px;
+    }
+
+    .btn:hover {
+      background-color: var(--bg-card);
+      border-color: var(--text-muted);
+    }
+
+    .btn.active {
+      background-color: var(--cyan);
+      border-color: var(--cyan);
+      color: #000;
+    }
+
+    .btn.active:hover {
+      background-color: #0891b2;
+    }
+
+    .btn-dropdown-wrapper {
+      position: relative;
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      right: 0;
+      top: 100%;
+      margin-top: 4px;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      width: 150px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+
+    .dropdown-item {
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      padding: 8px 12px;
+      text-align: left;
+      font-size: 0.8125rem;
+      cursor: pointer;
+      transition: background 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dropdown-item:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    /* Terminal Console */
+    .terminal-container {
+      flex: 1;
+      padding: 12px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.8125rem;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .terminal-container.wrap {
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .terminal-container:not(.wrap) {
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .log-line {
+      margin-bottom: 2px;
+      color: #d4d4d8;
+    }
+
+    .log-search-match {
+      background-color: rgba(234, 179, 8, 0.3);
+      color: var(--text-main);
+      border-radius: 2px;
+    }
+
+    .log-search-match.active {
+      background-color: var(--orange);
+      color: #000;
+      font-weight: 600;
+    }
+
+    .status-info-line {
+      color: var(--cyan);
+      font-weight: 500;
+    }
+
+    .status-error-line {
+      color: var(--red);
+      font-weight: 500;
+    }
+
+    /* System metrics colors */
+    .ansi-black { color: #000000; }
+    .ansi-red { color: #f87171; }
+    .ansi-green { color: #4ade80; }
+    .ansi-yellow { color: #fbbf24; }
+    .ansi-blue { color: #60a5fa; }
+    .ansi-magenta { color: #f472b6; }
+    .ansi-cyan { color: #22d3ee; }
+    .ansi-white { color: #f4f4f5; }
+    .ansi-bright-black { color: #71717a; }
+    .ansi-bright-red { color: #ef4444; }
+    .ansi-bright-green { color: #22c55e; }
+    .ansi-bright-yellow { color: #eab308; }
+    .ansi-bright-blue { color: #3b82f6; }
+    .ansi-bright-magenta { color: #ec4899; }
+    .ansi-bright-cyan { color: #06b6d4; }
+    .ansi-bright-white { color: #ffffff; }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #27272a;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3f3f46;
+    }
+  </style>
 </head>
 <body>
+  <div id="root"></div>
 
-    <div id="controls">
-        <input type="text" id="search-input" placeholder="Search logs...">
-        <button id="search-button">Search</button>
-        <button id="clear-search-button" style="display: none;">Clear Search</button>
-        <button id="download-button">Download All Logs</button>
-    </div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo, useCallback, memo } = React;
+    const { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } = Recharts;
 
-    <div id="terminal-container">
-        <div id="logs">
-            <!-- Log entries will be appended here by JavaScript -->
-        </div>
-        <span id="cursor"></span> <!-- The blinking cursor -->
-    </div>
+    const ansiUpInstance = new AnsiUp();
 
-    <script>
-        const logsDiv = document.getElementById('logs');
-        const terminalContainer = document.getElementById('terminal-container');
-        const cursorSpan = document.getElementById('cursor');
-        const searchInput = document.getElementById('search-input');
-        const searchButton = document.getElementById('search-button');
-        const clearSearchButton = document.getElementById('clear-search-button');
-        const downloadButton = document.getElementById('download-button');
+    // ----------------- Custom SVG Icons -----------------
+    const RefreshIcon = () => (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" /><path d="M16 16h5v5" /></svg>
+    );
+    const SettingsIcon = () => (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    );
+    const DownloadIcon = () => (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    );
+    const CopyIcon = () => (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    );
+    const PlayIcon = () => (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+    );
+    const PauseIcon = () => (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+    );
+    const ArrowUpIcon = () => (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+    );
+    const ArrowDownIcon = () => (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+    );
+    const TrashIcon = () => (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+    );
 
-        // *** IMPORTANT: Set this to the correct URL of your broadcaster endpoint ***
-        const logEndpoint = 'https://api.logs.synnabot.azaken.com/logs'; // Use your HTTPS domain
+    // ----------------- Individual Log Line Component -----------------
+    const LogLine = memo(({ text, searchRegex, index, isCurrentMatch }) => {
+      let html = '';
+      if (searchRegex) {
+        const tokenStart = `__MATCH_START_${isCurrentMatch ? 'ACTIVE' : 'NORMAL'}__`;
+        const tokenEnd = `__MATCH_END__`;
+        
+        const highlightedRaw = text.replace(searchRegex, (match) => `${tokenStart}${match}${tokenEnd}`);
+        html = ansiUpInstance.ansi_to_html(highlightedRaw)
+          .replace(new RegExp(`__MATCH_START_NORMAL__`, 'g'), '<mark class="log-search-match">')
+          .replace(new RegExp(`__MATCH_START_ACTIVE__`, 'g'), '<mark class="log-search-match active">')
+          .replace(new RegExp(`__MATCH_END__`, 'g'), '</mark>');
+      } else {
+        html = ansiUpInstance.ansi_to_html(text);
+      }
 
-        let eventSource = null;
-        const ansi_up = new AnsiUp();
+      return (
+        <div 
+          id={`log-line-${index}`}
+          className="log-line" 
+          dangerouslySetInnerHTML={{ __html: html }} 
+        />
+      );
+    });
 
-        // Array to store *complete* log entries as received from the server
-        const allLogs = [];
+    // ----------------- Main App Component -----------------
+    function App() {
+      const serverHost = 'http://localhost:6565';
 
-        function connectSSE() {
-            console.log(`Attempting to connect to SSE endpoint: ${logEndpoint}`);
+      const [logs, setLogs] = useState([]);
+      const [historyCount, setHistoryCount] = useState(500);
+      const [searchQuery, setSearchQuery] = useState('');
+      const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
+      const [searchRegex, setSearchRegex] = useState(false);
+      const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
 
-            if (eventSource) {
-                eventSource.close();
+      const [wrapLines, setWrapLines] = useState(false);
+      const [autoScroll, setAutoScroll] = useState(true);
+      const [isPaused, setIsPaused] = useState(false);
+      const [exportOpen, setExportOpen] = useState(false);
+
+      const [connectionStatus, setConnectionStatus] = useState('connecting');
+      const [processInfo, setProcessInfo] = useState(null);
+      const [activeConnections, setActiveConnections] = useState(0);
+      const [logSpeed, setLogSpeed] = useState(0);
+      const [metricsHistory, setMetricsHistory] = useState([]);
+
+      const logsRef = useRef([]);
+      const terminalRef = useRef(null);
+      const incomingCountRef = useRef(0);
+      const isPausedRef = useRef(false);
+      const sseRef = useRef(null);
+
+      // Force updating refs to avoid stale values in callbacks
+      logsRef.current = logs;
+      isPausedRef.current = isPaused;
+
+      // Log speed calculator
+      useEffect(() => {
+        const interval = setInterval(() => {
+          setLogSpeed(incomingCountRef.current);
+          incomingCountRef.current = 0;
+        }, 1000);
+        return () => clearInterval(interval);
+      }, []);
+
+      // Pull server health and update metrics
+      const fetchStats = useCallback(() => {
+        fetch(`${serverHost}/health/ready`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.status === 'READY' || data.status === 'NOT_READY') {
+              setProcessInfo(data.process);
+              setActiveConnections(data.activeConnections);
+              
+              setMetricsHistory(prev => {
+                const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const nextPoint = {
+                  time: now,
+                  cpu: data.process ? data.process.cpu : 0,
+                  memory: data.process ? Math.round(data.process.memory / 1024 / 1024) : 0
+                };
+                const updated = [...prev, nextPoint];
+                return updated.slice(Math.max(0, updated.length - 30));
+              });
             }
+          })
+          .catch(err => console.error('Failed to fetch stats:', err));
+      }, []);
 
-            eventSource = new EventSource(logEndpoint);
+      // Initial stats load and repeat polling
+      useEffect(() => {
+        fetchStats();
+        const interval = setInterval(fetchStats, 5000);
+        return () => clearInterval(interval);
+      }, [fetchStats]);
 
-            eventSource.onopen = function(event) {
-                console.log("SSE connection opened.");
-                 // Initial message from server is usually sent as a data: message right away
-            };
+      // Connect to SSE stream
+      const connectSSE = useCallback(() => {
+        if (sseRef.current) {
+          sseRef.current.close();
+        }
 
-            eventSource.onmessage = function(event) {
-                const logEntry = event.data; // This is the full, potentially multiline, log entry from the server
+        setConnectionStatus('connecting');
+        const sse = new EventSource(`${serverHost}/logs`);
+        sseRef.current = sse;
 
-                // Handle SSE comments (like heartbeats)
-                if (logEntry.startsWith(':')) {
-                     if (!logEntry.startsWith(':heartbeat')) {
-                         // It's a non-heartbeat comment, maybe an initial status message
-                         appendMessage(logEntry, 'status-message');
-                     }
-                     return; // Don't process comments as regular log entries
+        sse.onopen = () => {
+          setConnectionStatus('connected');
+          setLogs(prev => [
+            ...prev,
+            { text: `[${new Date().toISOString()}] [CLIENT] [INFO] --- SSE Log stream connected ---`, type: 'status-info' }
+          ]);
+        };
+
+        sse.onmessage = (event) => {
+          incomingCountRef.current++;
+          if (isPausedRef.current) return;
+
+          const text = event.data;
+          setLogs(prev => {
+            const updated = [...prev, { text, type: 'log' }];
+            // Keep buffer size limited to 5000 elements to prevent browser lag
+            if (updated.length > 5000) {
+              return updated.slice(updated.length - 5000);
+            }
+            return updated;
+          });
+        };
+
+        sse.onerror = (err) => {
+          console.error('SSE connection error:', err);
+          sse.close();
+          setConnectionStatus('disconnected');
+          setLogs(prev => [
+            ...prev,
+            { text: `[${new Date().toISOString()}] [CLIENT] [ERROR] --- SSE connection error. Attempting to reconnect... ---`, type: 'status-error' }
+          ]);
+          setTimeout(connectSSE, 5000);
+        };
+      }, []);
+
+      // Fetch historical logs from server
+      const loadHistory = useCallback(() => {
+        setLogs([
+          { text: `[${new Date().toISOString()}] [CLIENT] [INFO] --- Requesting ${historyCount} lines of historical logs... ---`, type: 'status-info' }
+        ]);
+
+        fetch(`${serverHost}/logs/history?lines=${historyCount}`)
+          .then(res => {
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            return res.json();
+          })
+          .then(data => {
+            if (data.lines && data.lines.length > 0) {
+              const histLogs = data.lines.map(line => ({ text: line, type: 'log' }));
+              setLogs(prev => [...prev.filter(l => l.type !== 'log'), ...histLogs]);
+            }
+            // Once history is loaded, start real-time connection
+            connectSSE();
+          })
+          .catch(err => {
+            console.error('History load failed:', err);
+            setLogs(prev => [
+              ...prev,
+              { text: `[${new Date().toISOString()}] [CLIENT] [ERROR] --- Failed to load historical logs. Launching stream... ---`, type: 'status-error' }
+            ]);
+            // Fallback to real-time logs only
+            connectSSE();
+          });
+      }, [historyCount, connectSSE]);
+
+      // Trigger history loading on boot
+      useEffect(() => {
+        loadHistory();
+        return () => {
+          if (sseRef.current) sseRef.current.close();
+        };
+      }, [loadHistory]);
+
+      // Autoscrolling logic
+      useEffect(() => {
+        if (autoScroll && terminalRef.current) {
+          terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+        }
+      }, [logs, autoScroll]);
+
+      // Search match query generator
+      const computedRegex = useMemo(() => {
+        if (!searchQuery) return null;
+        try {
+          const flags = searchCaseSensitive ? 'g' : 'gi';
+          const pattern = searchRegex 
+            ? searchQuery 
+            : searchQuery.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+          return new RegExp(pattern, flags);
+        } catch (e) {
+          return null;
+        }
+      }, [searchQuery, searchCaseSensitive, searchRegex]);
+
+      // Compute all line index matches matching search filters
+      const matchIndices = useMemo(() => {
+        if (!computedRegex) return [];
+        const indices = [];
+        logs.forEach((log, index) => {
+          if (log.type === 'log') {
+            // Test matches against plain text (ignoring HTML color codes)
+            const cleanText = log.text.replace(/\x1b\[[0-9;]*m/g, '');
+            if (computedRegex.test(cleanText)) {
+              indices.push(index);
+            }
+          }
+        });
+        return indices;
+      }, [logs, computedRegex]);
+
+      // Reset match selection on search parameter variations
+      useEffect(() => {
+        if (matchIndices.length > 0) {
+          setCurrentMatchIndex(0);
+        } else {
+          setCurrentMatchIndex(-1);
+        }
+      }, [matchIndices]);
+
+      // Scroll into view on search match focus index update
+      useEffect(() => {
+        if (matchIndices.length > 0 && currentMatchIndex >= 0) {
+          const indexToScroll = matchIndices[currentMatchIndex];
+          const element = document.getElementById(`log-line-${indexToScroll}`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      }, [currentMatchIndex, matchIndices]);
+
+      const handleNextMatch = () => {
+        if (matchIndices.length === 0) return;
+        setCurrentMatchIndex(prev => (prev + 1) % matchIndices.length);
+      };
+
+      const handlePrevMatch = () => {
+        if (matchIndices.length === 0) return;
+        setCurrentMatchIndex(prev => (prev - 1 + matchIndices.length) % matchIndices.length);
+      };
+
+      // Export handlers
+      const downloadTextFile = () => {
+        const text = logs.map(l => l.text).join('\n');
+        const blob = new Blob([text], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `logs_export_${Date.now()}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setExportOpen(false);
+      };
+
+      const downloadJsonFile = () => {
+        const exportData = logs.map((l, index) => {
+          const cleanText = l.text.replace(/\x1b\[[0-9;]*m/g, '');
+          return {
+            id: index,
+            raw: l.text,
+            text: cleanText,
+            type: l.type
+          };
+        });
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `logs_export_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setExportOpen(false);
+      };
+
+      const copyToClipboard = () => {
+        const text = logs.map(l => l.text.replace(/\x1b\[[0-9;]*m/g, '')).join('\n');
+        navigator.clipboard.writeText(text)
+          .then(() => alert('Copied clean logs to clipboard.'))
+          .catch(err => console.error('Failed to copy:', err));
+        setExportOpen(false);
+      };
+
+      return (
+        <React.Fragment>
+          {/* Header */}
+          <header className="dashboard-header">
+            <div className="header-title">
+              <span>Synnabot Logs Console</span>
+              <span className="status-badge" style={{ fontSize: '0.75rem', padding: '2px 6px', color: 'var(--text-muted)' }}>
+                PID: {processInfo ? processInfo.pid : 'N/A'}
+              </span>
+            </div>
+            
+            <div className="header-status">
+              <div className="status-badge">
+                <span className={`status-dot ${connectionStatus}`}></span>
+                <span style={{ textTransform: 'capitalize' }}>Stream: {connectionStatus}</span>
+              </div>
+              <div className="status-badge" style={{ color: activeConnections > 0 ? 'var(--cyan)' : 'var(--text-muted)' }}>
+                Active Viewers: {activeConnections}
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
+                Monitored Process: <span style={{ color: 'var(--text-main)', fontWeight: '600' }}>{processInfo ? processInfo.name : 'Unknown'}</span>
+              </div>
+            </div>
+          </header>
+
+          {/* Metrics Grid */}
+          <section className="metrics-grid">
+            {/* Status Card */}
+            <div className="metric-card">
+              <span className="metric-label">Status</span>
+              <span className="metric-value" style={{ color: processInfo?.status === 'online' ? 'var(--green)' : 'var(--red)' }}>
+                {processInfo ? processInfo.status.toUpperCase() : 'OFFLINE'}
+              </span>
+              <span className="metric-subtext">Restarts: {processInfo ? processInfo.restarts : 0}</span>
+            </div>
+
+            {/* Uptime Card */}
+            <div className="metric-card">
+              <span className="metric-label">App Uptime</span>
+              <span className="metric-value">
+                {processInfo?.uptime 
+                  ? `${Math.floor((Date.now() - processInfo.uptime) / 3600000)}h ${Math.floor(((Date.now() - processInfo.uptime) % 3600000) / 60000)}m`
+                  : '0h 0m'
                 }
+              </span>
+              <span className="metric-subtext">Running since: {processInfo?.uptime ? new Date(processInfo.uptime).toLocaleDateString() : 'N/A'}</span>
+            </div>
 
-                // If not a comment, it's a log entry
-                allLogs.push(logEntry); // Store the complete entry
+            {/* CPU Monitor Card */}
+            <div className="metric-card">
+              <span className="metric-label">CPU Usage</span>
+              <span className="metric-value">{processInfo ? processInfo.cpu : 0}%</span>
+              
+              <div className="chart-container">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={metricsHistory} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorCpu" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--cyan)" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="var(--cyan)" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <Tooltip contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', fontSize: '10px' }} />
+                    <Area type="monotone" dataKey="cpu" stroke="var(--cyan)" strokeWidth={1.5} fillOpacity={1} fill="url(#colorCpu)" name="CPU (%)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
 
-                // Only render if not currently searching
-                if (searchInput.value.trim() === '') {
-                    renderLogEntry(logEntry); // Render the complete entry
+            {/* Memory Monitor Card */}
+            <div className="metric-card">
+              <span className="metric-label">Memory Usage</span>
+              <span className="metric-value">{processInfo ? Math.round(processInfo.memory / 1024 / 1024) : 0} MB</span>
+              
+              <div className="chart-container">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={metricsHistory} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorMemory" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--orange)" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="var(--orange)" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <Tooltip contentStyle={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', fontSize: '10px' }} />
+                    <Area type="monotone" dataKey="memory" stroke="var(--orange)" strokeWidth={1.5} fillOpacity={1} fill="url(#colorMemory)" name="RAM (MB)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </section>
+
+          {/* Console */}
+          <main className="console-panel">
+            {/* Toolbar */}
+            <div className="console-toolbar">
+              <div className="toolbar-left">
+                {/* Search controls */}
+                <div className="search-control">
+                  <input 
+                    type="text" 
+                    className="search-input" 
+                    placeholder="Search console logs..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  
+                  {searchQuery && (
+                    <span className="search-indicator">
+                      {matchIndices.length > 0 ? `${currentMatchIndex + 1}/${matchIndices.length}` : '0/0'}
+                    </span>
+                  )}
+
+                  <button className="search-btn" title="Previous match" onClick={handlePrevMatch} disabled={matchIndices.length === 0}>
+                    <ArrowUpIcon />
+                  </button>
+                  <button className="search-btn" title="Next match" onClick={handleNextMatch} disabled={matchIndices.length === 0}>
+                    <ArrowDownIcon />
+                  </button>
+
+                  <button 
+                    className={`search-toggle-btn ${searchCaseSensitive ? 'active' : ''}`}
+                    onClick={() => setSearchCaseSensitive(!searchCaseSensitive)}
+                    title="Match Case"
+                  >
+                    Aa
+                  </button>
+                  <button 
+                    className={`search-toggle-btn ${searchRegex ? 'active' : ''}`}
+                    onClick={() => setSearchRegex(!searchRegex)}
+                    title="Regex Match"
+                  >
+                    .*
+                  </button>
+                </div>
+
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Total Lines: {logs.filter(l => l.type === 'log').length} | Speed: {logSpeed} lines/s
+                </span>
+              </div>
+
+              <div className="toolbar-right">
+                {/* History dropdown */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>History Limit:</span>
+                  <select 
+                    style={{ 
+                      backgroundColor: 'var(--bg-main)', 
+                      color: 'var(--text-main)', 
+                      border: '1px solid var(--border-color)', 
+                      borderRadius: '4px',
+                      fontSize: '0.75rem',
+                      padding: '4px',
+                      height: '32px',
+                      outline: 'none'
+                    }}
+                    value={historyCount}
+                    onChange={(e) => setHistoryCount(parseInt(e.target.value, 10))}
+                  >
+                    <option value="100">100 lines</option>
+                    <option value="500">500 lines</option>
+                    <option value="1000">1000 lines</option>
+                    <option value="2000">2000 lines</option>
+                  </select>
+                  <button className="btn" title="Reload History" onClick={loadHistory}>
+                    <RefreshIcon />
+                  </button>
+                </div>
+
+                {/* Wrap Toggle */}
+                <button 
+                  className={`btn ${wrapLines ? 'active' : ''}`}
+                  onClick={() => setWrapLines(!wrapLines)}
+                >
+                  Wrap
+                </button>
+
+                {/* Autoscroll Toggle */}
+                <button 
+                  className={`btn ${autoScroll ? 'active' : ''}`}
+                  onClick={() => setAutoScroll(!autoScroll)}
+                >
+                  Autoscroll
+                </button>
+
+                {/* Play/Pause Toggle */}
+                <button 
+                  className="btn" 
+                  onClick={() => setIsPaused(!isPaused)}
+                  title={isPaused ? 'Resume stream' : 'Pause stream'}
+                >
+                  {isPaused ? <PlayIcon /> : <PauseIcon />}
+                  {isPaused ? 'Resume' : 'Pause'}
+                </button>
+
+                {/* Clear Console */}
+                <button 
+                  className="btn" 
+                  onClick={() => setLogs([])}
+                  title="Clear Console"
+                >
+                  <TrashIcon />
+                  Clear
+                </button>
+
+                {/* Export Dropdown */}
+                <div className="btn-dropdown-wrapper">
+                  <button className="btn" onClick={() => setExportOpen(!exportOpen)}>
+                    <DownloadIcon />
+                    Export
+                  </button>
+                  {exportOpen && (
+                    <div className="dropdown-menu">
+                      <button className="dropdown-item" onClick={downloadTextFile}>
+                        <DownloadIcon />
+                        Download .txt
+                      </button>
+                      <button className="dropdown-item" onClick={downloadJsonFile}>
+                        <DownloadIcon />
+                        Download .json
+                      </button>
+                      <button className="dropdown-item" onClick={copyToClipboard}>
+                        <CopyIcon />
+                        Copy to Clipboard
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Terminal Body */}
+            <div 
+              ref={terminalRef}
+              className={`terminal-container ${wrapLines ? 'wrap' : ''}`}
+            >
+              {logs.map((log, index) => {
+                if (log.type === 'status-info') {
+                  return <div key={index} className="log-line status-info-line">{log.text}</div>;
                 }
-                // If search is active, new logs won't appear until search is cleared or rerun
-            };
-
-            eventSource.onerror = function(err) {
-                console.error("SSE error:", err);
-                 // Check readyState to distinguish between intentional close and network error
-                if (eventSource.readyState === EventSource.CLOSED) {
-                     console.log("SSE connection closed normally or due to unrecoverable error.");
-                     appendMessage('--- SSE Connection closed. ---', 'error-message');
-                } else {
-                    console.log("SSE error. Attempting to reconnect in 5 seconds...");
-                    appendMessage(`--- SSE Error: ${err.message || 'Connection failed'}. Attempting to reconnect... ---`, 'error-message');
-                    eventSource.close(); // Ensure closed before attempting reconnect
-                    setTimeout(connectSSE, 5000); // Attempt reconnect
+                if (log.type === 'status-error') {
+                  return <div key={index} className="log-line status-error-line">{log.text}</div>;
                 }
-            };
-        }
+                
+                const isMatch = matchIndices.includes(index);
+                const isCurrentMatch = isMatch && (matchIndices[currentMatchIndex] === index);
 
-        // Function to render a *complete* log entry (potentially multiline) to the display
-        function renderLogEntry(fullLogEntry) {
-            const htmlEntry = ansi_up.ansi_to_html(fullLogEntry);
-            const entryElement = document.createElement('div');
-            entryElement.className = 'log-entry'; // Use log-entry class for complete entries
-             // Use   for completely empty entries (after trimming) to ensure they take up space for height
-             entryElement.innerHTML = htmlEntry.trim() === '' ? ' ' : htmlEntry;
+                return (
+                  <LogLine 
+                    key={index} 
+                    index={index}
+                    text={log.text} 
+                    searchRegex={isMatch ? computedRegex : null}
+                    isCurrentMatch={isCurrentMatch}
+                  />
+                );
+              })}
+            </div>
+          </main>
+        </React.Fragment>
+      );
+    }
 
-            logsDiv.appendChild(entryElement);
-
-            // Scroll to the bottom after appending the log entry
-            scrollToBottom();
-        }
-
-        // Function to clear the current displayed logs (all the individual entry divs)
-        function clearDisplayedLogs() {
-            while (logsDiv.firstChild) {
-                logsDiv.removeChild(logsDiv.firstChild);
-            }
-        }
-
-        // Function to filter and display logs based on the search term
-        function performSearch() {
-            const searchTerm = searchInput.value.trim().toLowerCase(); // Case-insensitive search
-            clearDisplayedLogs(); // Clear current view
-
-            if (searchTerm === '') {
-                // If search term is empty, display all original log entries
-                allLogs.forEach(logEntry => renderLogEntry(logEntry));
-                searchButton.textContent = 'Search'; // Reset button text
-                clearSearchButton.style.display = 'none'; // Hide clear button
-                console.log("Search cleared. Displaying all logs.");
-
-                // Add a status message about clearing search
-                 appendMessage(`--- Displaying all ${allLogs.length} stored log entries. ---`, 'status-message');
-
-            } else {
-                // Filter original log entries (which contain the full text including newlines)
-                const matchingLogs = allLogs.filter(logEntry => logEntry.toLowerCase().includes(searchTerm));
-
-                // Append the matching original log entries to the display
-                matchingLogs.forEach(logEntry => renderLogEntry(logEntry));
-
-                searchButton.textContent = `Search (${matchingLogs.length})`; // Update button text with count
-                clearSearchButton.style.display = 'inline-block'; // Show clear button
-                console.log(`Search for "${searchTerm}" complete. Found ${matchingLogs.length} matching entries.`);
-
-                // Add a status message about the search results
-                appendMessage(`--- Search for "${searchTerm}" found ${matchingLogs.length} matching entries. ---`, 'status-message');
-            }
-             // After search, always scroll to the top of the container to see results from the beginning
-             // unless there are no logs, then scroll to bottom to see status
-             if(logsDiv.childElementCount > 0) {
-                terminalContainer.scrollTop = 0;
-             } else {
-                scrollToBottom(); // Scroll to see the 'found 0' message
-             }
-        }
-
-        // Event listener for the Search button
-        searchButton.addEventListener('click', performSearch);
-
-        // Allow pressing Enter in the search input to trigger search
-        searchInput.addEventListener('keypress', (event) => {
-            if (event.key === 'Enter') {
-                event.preventDefault(); // Prevent default form submission if input was inside a form
-                performSearch();
-            }
-        });
-
-        // Event listener for the Clear Search button
-        clearSearchButton.addEventListener('click', () => {
-            searchInput.value = ''; // Clear the input field
-            performSearch(); // Perform search with empty term (will display all logs)
-        });
-
-
-        // Function to download all stored logs
-        function downloadLogs() {
-            // Join original log entries with newlines for download
-            const logContent = allLogs.join('\n'); // Join all log entries with newlines
-
-            const blob = new Blob([logContent], { type: 'text/plain' }); // Create a Blob
-            const url = URL.createObjectURL(blob); // Create a temporary URL for the Blob
-
-            const a = document.createElement('a'); // Create a temporary anchor element
-            a.href = url;
-            a.download = `synnabot_logs_${new Date().toISOString().replace(/[:.-]/g, '_')}.txt`; // Filename
-            document.body.appendChild(a); // Append to body is sometimes required for click() to work
-            a.click(); // Programmatically click the link to trigger download
-
-            // Clean up
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-             console.log(`Downloaded ${allLogs.length} log entries.`);
-              appendMessage(`--- Downloaded ${allLogs.length} log entries. ---`, 'status-message');
-        }
-
-        // Event listener for the Download button
-        downloadButton.addEventListener('click', downloadLogs);
-
-
-        // Function to append a simple status or error message to the logs
-        // These messages are treated as single log entries and are not stored in allLogs
-        function appendMessage(message, className = '') {
-             const msgElement = document.createElement('div');
-             msgElement.className = `log-entry ${className}`; // Add 'log-entry' class and any custom class
-             // Use innerHTML for ANSI colors if messages might contain them, otherwise textContent is safer
-             msgElement.textContent = message;
-             // Ensure it renders even if empty or whitespace only
-             if (msgElement.textContent.trim() === '') msgElement.innerHTML = ' ';
-
-             logsDiv.appendChild(msgElement);
-             // Don't auto-scroll after status messages unless near the bottom or it's the only message
-             if (terminalContainer.scrollHeight - terminalContainer.scrollTop - terminalContainer.clientHeight <= 100 || logsDiv.children.length <= 2) {
-                 scrollToBottom();
-             }
-        }
-
-        // Function to scroll the terminal container to the bottom
-        function scrollToBottom() {
-             // Only auto-scroll if the user is already near the bottom (within 50px)
-             const threshold = 50;
-             const isNearBottom = terminalContainer.scrollHeight - terminalContainer.scrollTop - terminalContainer.clientHeight <= threshold;
-
-             if (isNearBottom) {
-                 terminalContainer.scrollTop = terminalContainer.scrollHeight;
-                // Ensure the cursor is also visible at the bottom if it exists
-                 if (cursorSpan) {
-                     cursorSpan.scrollIntoView(false);
-                 }
-             }
-             // If not near bottom, the user is likely reviewing history, so don't auto-scroll.
-        }
-
-        // Start the SSE connection when the page loads
-        connectSSE();
-
-        // Optional: Hide cursor when mouse is over the terminal area, like some terminals
-        terminalContainer.addEventListener('mouseenter', () => {
-             if (cursorSpan) cursorSpan.style.visibility = 'hidden';
-        });
-         terminalContainer.addEventListener('mouseleave', () => {
-            if (cursorSpan) cursorSpan.style.visibility = 'visible';
-         });
-
-        // Handle cleanup when the page unloads
-        window.addEventListener('beforeunload', () => {
-             if (eventSource) {
-                 eventSource.close(); // Close the SSE connection
-             }
-        });
-
-    </script>
-
+    const rootElement = document.getElementById('root');
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(<App />);
+  </script>
 </body>
 </html>

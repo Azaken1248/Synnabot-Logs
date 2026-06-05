@@ -1,5 +1,6 @@
 import pm2 from 'pm2';
 import { EventEmitter } from 'events';
+import fs from 'fs';
 import config from '../config.mjs';
 import { createChildLogger } from '../logger.mjs';
 
@@ -169,6 +170,85 @@ class PM2Service extends EventEmitter {
     }
   }
 
+  getProcessInfo(callback) {
+    if (!this.connected) {
+      return callback(null, null);
+    }
+    pm2.describe(config.pm2AppName, (err, processDescriptionList) => {
+      if (err) {
+        logger.error({ err }, 'Error in pm2.describe');
+        return callback(err, null);
+      }
+      if (!processDescriptionList || processDescriptionList.length === 0) {
+        return callback(null, null);
+      }
+      const processInfo = processDescriptionList[0];
+      const name = processInfo.name;
+      const pid = processInfo.pid;
+      const status = processInfo.pm2_env?.status;
+      const uptime = processInfo.pm2_env?.pm_uptime;
+      const restarts = processInfo.pm2_env?.restart_time;
+      const cpu = processInfo.monit?.cpu || 0;
+      const memory = processInfo.monit?.memory || 0;
+      const outLog = processInfo.pm2_env?.pm_out_log_path;
+      const errLog = processInfo.pm2_env?.pm_err_log_path;
+
+      callback(null, {
+        name,
+        pid,
+        status,
+        uptime,
+        restarts,
+        cpu,
+        memory,
+        outLog,
+        errLog,
+      });
+    });
+  }
+
+  getLogHistory(linesCount, callback) {
+    this.getProcessInfo(async (err, info) => {
+      if (err) return callback(err, []);
+      if (!info) return callback(new Error('Process not found'), []);
+
+      try {
+        const outLines = info.outLog ? await readLastLines(info.outLog, linesCount) : [];
+        const errLines = info.errLog ? await readLastLines(info.errLog, linesCount) : [];
+
+        const stdoutLogs = outLines.map((line) => ({
+          type: 'out',
+          text: line,
+          timestamp: parseTimestamp(line) || 0,
+        }));
+
+        const stderrLogs = errLines.map((line) => ({
+          type: 'err',
+          text: line,
+          timestamp: parseTimestamp(line) || 0,
+        }));
+
+        const combined = [...stdoutLogs, ...stderrLogs];
+        if (combined.some((c) => c.timestamp > 0)) {
+          combined.sort((a, b) => a.timestamp - b.timestamp);
+        }
+
+        const resultLines = combined.map((c) => {
+          const hasTime = /^\[\d{4}-\d{2}-\d{2}/.test(c.text) || /^\d{4}-\d{2}-\d{2}/.test(c.text);
+          if (hasTime) return c.text;
+
+          const prefix = c.type === 'err' ? 'ERR' : 'OUT';
+          return `[${new Date().toISOString()}] [${info.name}] [${prefix}] ${c.text}`;
+        });
+
+        callback(null, resultLines.slice(Math.max(0, resultLines.length - linesCount)));
+      } catch (historyErr) {
+        logger.error({ err: historyErr }, 'Error reading PM2 log history files');
+        callback(historyErr, []);
+      }
+    });
+  }
+
   getStatus() {
     return {
       connected: this.connected,
@@ -178,6 +258,66 @@ class PM2Service extends EventEmitter {
     };
   }
 }
+
+const readLastLines = (filePath, maxLines) => {
+  return new Promise((resolve) => {
+    try {
+      const stats = fs.statSync(filePath);
+      if (!stats.isFile()) return resolve([]);
+
+      const fd = fs.openSync(filePath, 'r');
+      const bufferSize = 8192;
+      const buffer = Buffer.alloc(bufferSize);
+      let lines = [];
+      let filePosition = stats.size;
+      let leftOver = '';
+
+      while (filePosition > 0 && lines.length <= maxLines) {
+        const amountToRead = Math.min(bufferSize, filePosition);
+        filePosition -= amountToRead;
+
+        fs.readSync(fd, buffer, 0, amountToRead, filePosition);
+        const chunk = buffer.toString('utf8', 0, amountToRead) + leftOver;
+        const chunkLines = chunk.split('\n');
+
+        if (filePosition > 0) {
+          leftOver = chunkLines.shift();
+        } else {
+          leftOver = '';
+        }
+
+        lines = chunkLines.concat(lines);
+      }
+
+      fs.closeSync(fd);
+
+      if (leftOver) {
+        lines.unshift(leftOver);
+      }
+
+      if (lines.length > maxLines) {
+        lines = lines.slice(lines.length - maxLines);
+      }
+
+      lines = lines
+        .map((line) => line.replace(/\r$/, ''))
+        .filter((line) => line.trim() !== '');
+
+      resolve(lines);
+    } catch (err) {
+      resolve([]);
+    }
+  });
+};
+
+const parseTimestamp = (line) => {
+  const match = line.match(/^\[?(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)\]?/);
+  if (match) {
+    const d = Date.parse(match[1]);
+    if (!isNaN(d)) return d;
+  }
+  return null;
+};
 
 const pm2Service = new PM2Service();
 export default pm2Service;

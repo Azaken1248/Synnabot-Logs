@@ -6,6 +6,7 @@ import { setupSecurity } from './middleware/security.mjs';
 import pm2Service from './services/pm2Service.mjs';
 import healthRouter from './routes/health.mjs';
 import logsRouter from './routes/logs.mjs';
+import historyRouter from './routes/history.mjs';
 
 const serverLogger = createChildLogger('bootstrap');
 const app = express();
@@ -26,6 +27,7 @@ app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
 app.use('/', healthRouter);
 app.use('/', logsRouter);
+app.use('/', historyRouter);
 
 app.get('/', (_req, res) => {
   res.send(`PM2 Log Broadcaster is running and listening for logs from "${config.pm2AppName}". Access /logs for the real-time log stream.`);

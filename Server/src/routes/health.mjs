@@ -28,18 +28,21 @@ router.get('/health', (_req, res) => {
 });
 
 router.get('/health/ready', (_req, res) => {
-  const pm2Status = pm2Service.getStatus();
-  const systemMetrics = getSystemMetrics();
-  const activeSseClients = getActiveClientsCount();
+  pm2Service.getProcessInfo((err, processInfo) => {
+    const pm2Status = pm2Service.getStatus();
+    const systemMetrics = getSystemMetrics();
+    const activeSseClients = getActiveClientsCount();
 
-  const isReady = pm2Status.connected && pm2Status.busReady;
+    const isReady = pm2Status.connected && pm2Status.busReady;
 
-  res.status(isReady ? 200 : 503).json({
-    status: isReady ? 'READY' : 'NOT_READY',
-    timestamp: new Date().toISOString(),
-    pm2: pm2Status,
-    metrics: systemMetrics,
-    activeConnections: activeSseClients,
+    res.status(isReady ? 200 : 503).json({
+      status: isReady ? 'READY' : 'NOT_READY',
+      timestamp: new Date().toISOString(),
+      pm2: pm2Status,
+      process: processInfo || null,
+      metrics: systemMetrics,
+      activeConnections: activeSseClients,
+    });
   });
 });
 
